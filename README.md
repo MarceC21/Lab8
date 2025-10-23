@@ -36,3 +36,6 @@ Detalles: selecciona una foto para ver detalles y guardarla como favorita.
 Perfil / Favoritos: revisa tus fotos guardadas incluso sin conexión.
 
 Navegación: la app usa navegación con rutas y argumentos (NavHost).
+
+![Gif Demo](mLab8/Grabación%202025-10-16%20214344.gif)
+
