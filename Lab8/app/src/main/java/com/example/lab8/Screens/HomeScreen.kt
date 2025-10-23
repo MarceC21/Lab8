@@ -1,18 +1,22 @@
 package com.example.lab8.Screens
 
+package com.example.lab8
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -22,15 +26,10 @@ import com.example.lab8.remote.PexelsRemoteMediator
 import com.example.lab8.remote.PexelsService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.paging.*
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.LazyPagingItems
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.platform.LocalContext
-import com.example.lab8.Data.DatabaseProvider
-import kotlinx.coroutines.withContext
-
 
 @OptIn(ExperimentalPagingApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -44,14 +43,10 @@ fun HomeScreen(navController: NavController) {
     val api = remember { PexelsService.api }
     val scope = rememberCoroutineScope()
 
-    // Pager con RemoteMediator
+    // 🔹 Pager seguro con RemoteMediator
     val pager = remember(searchTrigger) {
         Pager(
-            config = PagingConfig(
-                pageSize = 30,
-                enablePlaceholders = false,
-                prefetchDistance = 5
-            ),
+            config = PagingConfig(pageSize = 30, enablePlaceholders = false, prefetchDistance = 5),
             remoteMediator = PexelsRemoteMediator(
                 query = searchTrigger,
                 database = db,
@@ -64,11 +59,10 @@ fun HomeScreen(navController: NavController) {
 
     val lazyPagingItems = pager.flow.collectAsLazyPagingItems()
 
-    // Guardar búsqueda en historial
+    // 🔹 Guarda búsquedas en historial
     LaunchedEffect(searchTrigger) {
         if (searchTrigger.isNotBlank()) {
             dao.upsertSearch(searchTrigger)
-
         }
     }
 
@@ -80,6 +74,7 @@ fun HomeScreen(navController: NavController) {
                     IconButton(onClick = { navController.navigate("profile") }) {
                         Icon(Icons.Default.AccountCircle, contentDescription = "Perfil")
                     }
+
                 }
             )
         }
@@ -89,7 +84,7 @@ fun HomeScreen(navController: NavController) {
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            // Barra de búsqueda
+            // 🔹 Barra de búsqueda
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
@@ -106,13 +101,39 @@ fun HomeScreen(navController: NavController) {
                         },
                         enabled = query.isNotBlank()
                     ) {
-                        Icon(Icons.Default.Search, "Buscar")
+                        Icon(Icons.Default.Search, contentDescription = "Buscar")
                     }
                 },
                 singleLine = true
             )
+            var recentSearches by remember { mutableStateOf<List<Search>>(emptyList()) }
+            LaunchedEffect(Unit) {
+                recentSearches = dao.getLastSearches()
+            }
 
-            // Grid con paginación
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp)
+            ) {
+                recentSearches.forEach { recent ->
+                    Text(
+                        text = recent.query,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                query = recent.query
+                                searchTrigger = recent.query
+                            }
+                            .padding(vertical = 4.dp),
+                        color = Color.Gray
+                    )
+                    Divider(color = Color.LightGray)
+                }
+            }
+
+
+            // 🔹 Grid con paginación
             PagingPhotoGrid(
                 lazyPagingItems = lazyPagingItems,
                 dao = dao,
@@ -133,20 +154,22 @@ fun PagingPhotoGrid(
         contentPadding = PaddingValues(8.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        items(lazyPagingItems.itemCount, key = { index -> lazyPagingItems[index]?.id ?: index }) { index ->
-            val photoEntity = lazyPagingItems[index]
-            photoEntity?.let { entity ->
-                PhotoItem(
-                    photoEntity = entity,
-                    dao = dao,
-                    onPhotoClick = { navController.navigate("details/${entity.id}") }
-                )
-            }
+        // ✅ Usa snapshotList para evitar índices fuera de rango
+        items(lazyPagingItems.itemSnapshotList.items, key = { it.id }) { entity ->
+            PhotoItem(
+                photoEntity = entity,
+                dao = dao,
+                onPhotoClick = {
+                    if (entity.id > 0) {
+                        navController.navigate("details/${entity.id}")
+                    }
+                }
+            )
         }
 
         // Footer de carga
         if (lazyPagingItems.loadState.append is LoadState.Loading) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
+            item {
                 Box(
                     Modifier
                         .fillMaxWidth()
@@ -158,6 +181,7 @@ fun PagingPhotoGrid(
         }
     }
 }
+
 
 @Composable
 fun PhotoItem(
@@ -179,7 +203,7 @@ fun PhotoItem(
             .padding(4.dp)
             .fillMaxWidth()
             .aspectRatio(1f),
-        onClick = onPhotoClick
+        onClick = onPhotoClick  // ✅ Usa el onClick nativo del Card
     ) {
         Box(Modifier.fillMaxSize()) {
             AsyncImage(
@@ -188,13 +212,13 @@ fun PhotoItem(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // Overlay autor
+            // Gradiente solo al fondo (no bloquea toques)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))
                         )
                     )
                     .padding(8.dp)
@@ -206,26 +230,8 @@ fun PhotoItem(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-
-            // Favorito
-            IconButton(
-                onClick = {
-                    scope.launch(Dispatchers.IO) {
-                        if (isFavorite) dao.deleteFavorite(Favorite(photoEntity.id))
-                        else dao.insertFavorite(Favorite(photoEntity.id))
-                        isFavorite = !isFavorite
-                    }
-                },
-                modifier = Modifier
-                    .padding(4.dp)
-                    .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-            ) {
-                Icon(
-                    imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = "Favorito",
-                    tint = if (isFavorite) Color.Red else Color.White
-                )
-            }
         }
     }
+
 }
+
